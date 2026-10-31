@@ -58,6 +58,10 @@ def fetch_day(browser, day):
         page.get_by_text("Показати розклад занять").first.click()
         page.wait_for_timeout(PAUSE_MS)
         rows = page.evaluate(JS)
+        if not any(r[0] == d for r in rows):
+            # діагностика: що саме побачила сторінка, коли пар за день не знайдено
+            body = page.evaluate("() => document.body.innerText")
+            print(f"[debug {d}] рядків на сторінці: {len(rows)}; текст: {' '.join(body.split())[:500]!r}")
     finally:
         page.close()
     return [r for r in rows if r[0] == d]
