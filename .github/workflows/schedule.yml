@@ -1,0 +1,46 @@
+name: schedule
+
+on:
+  schedule:
+    # Час у cron — UTC. Зараз Київ = UTC+2 (зима).
+    # Влітку (UTC+3) кожну годину зсунути на 1 назад:
+    #   '30 3 * * *', '0 17 * * *', '0 5,7,9,11,13,15 * * *'
+    # Режим full/quick збирач вибирає сам за київським часом (auto), тут нічого більше міняти не треба.
+    - cron: '30 4 * * *'              # 06:30 Київ — повне, 7 днів
+    - cron: '0 18 * * *'              # 20:00 Київ — повне, 7 днів
+    - cron: '0 6,8,10,12,14,16 * * *' # 08:00–18:00 Київ, кожні 2 год — сьогодні й завтра
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'auto = за часом доби, full = 7 днів, quick = сьогодні й завтра'
+        type: choice
+        options: [auto, full, quick]
+        default: full
+
+permissions:
+  contents: write
+
+concurrency:
+  group: schedule
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Встановити Playwright
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Зібрати розклад
+        env:
+          INPUT_MODE: ${{ github.event.inputs.mode }}
+        run: python collect.py "${INPUT_MODE:-auto}"
