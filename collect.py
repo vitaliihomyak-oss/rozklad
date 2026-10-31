@@ -19,6 +19,10 @@ GROUP = "ПБ23к"
 OUT = "schedule.json"
 TZ = ZoneInfo("Europe/Kyiv")
 PAUSE_MS = 6000  # сайт повільний — чекаємо 6 с після натискання
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+)
 
 DAYS_FULL = 7
 DAYS_QUICK = 2
@@ -50,7 +54,11 @@ _dumped = 0
 def _query(browser, d, group):
     """Один запит розкладу за дату d для назви групи group. Повертає рядки лише за цю дату."""
     global _dumped
-    page = browser.new_page()
+    context = browser.new_context(user_agent=USER_AGENT, locale="uk-UA", timezone_id="Europe/Kyiv")
+    page = context.new_page()
+    log = []
+    page.on("request", lambda r: log.append(f"> {r.method} {r.url} {(r.post_data or '')[:200]}") if "timetable" in r.url else None)
+    page.on("response", lambda r: log.append(f"< {r.status} {r.url}") if "timetable" in r.url else None)
     try:
         page.goto(URL, wait_until="domcontentloaded", timeout=90000)
         field = page.get_by_placeholder("Назва групи")
@@ -74,10 +82,11 @@ def _query(browser, d, group):
             )
             body = page.evaluate("() => document.body.innerText")
             print(f"[debug {d} група={group!r}] поля: {inputs}")
-            print(f"[debug {d}] текст: {' '.join(body.split())[:700]!r}")
+            print(f"[debug {d}] запити: {log}")
+            print(f"[debug {d}] текст: {' '.join(body.split())[:300]!r}")
         return rows
     finally:
-        page.close()
+        context.close()
 
 
 def fetch_day(browser, day):
