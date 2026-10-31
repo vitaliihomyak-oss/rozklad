@@ -44,27 +44,51 @@ def parse_date(k):
     return datetime.strptime(k, "%d.%m.%Y")
 
 
-def fetch_day(browser, day):
-    """Один день: обидва поля дати — однакові. Повертає рядки лише за цю дату."""
-    d = day.strftime("%d.%m.%Y")
+_dumped = 0
+
+
+def _query(browser, d, group):
+    """Один запит розкладу за дату d для назви групи group. Повертає рядки лише за цю дату."""
+    global _dumped
     page = browser.new_page()
     try:
         page.goto(URL, wait_until="domcontentloaded", timeout=90000)
-        page.get_by_placeholder("Назва групи").wait_for(timeout=60000)
-        page.get_by_placeholder("Назва групи").fill(GROUP)
+        field = page.get_by_placeholder("Назва групи")
+        field.wait_for(timeout=60000)
+        field.click()
+        # набираємо як людина, щоб спрацювали обробники й підказки сайту
+        field.press_sequentially(group, delay=80)
+        page.wait_for_timeout(1500)
         dates = page.get_by_placeholder("дд.мм.рррр")
-        dates.nth(0).fill(d)
-        dates.nth(1).fill(d)
+        for i in (0, 1):
+            dates.nth(i).fill(d)
+            dates.nth(i).blur()
         page.get_by_text("Показати розклад занять").first.click()
         page.wait_for_timeout(PAUSE_MS)
-        rows = page.evaluate(JS)
-        if not any(r[0] == d for r in rows):
-            # діагностика: що саме побачила сторінка, коли пар за день не знайдено
+        rows = [r for r in page.evaluate(JS) if r[0] == d]
+        if not rows and _dumped < 2:
+            _dumped += 1
+            inputs = page.evaluate(
+                "() => [...document.querySelectorAll('input,select,textarea')]"
+                ".map(e => [e.tagName, e.type || '', e.name || '', e.id || '', e.placeholder || '', e.value || ''].join('|'))"
+            )
             body = page.evaluate("() => document.body.innerText")
-            print(f"[debug {d}] рядків на сторінці: {len(rows)}; текст: {' '.join(body.split())[:500]!r}")
+            print(f"[debug {d} група={group!r}] поля: {inputs}")
+            print(f"[debug {d}] текст: {' '.join(body.split())[:700]!r}")
+        return rows
     finally:
         page.close()
-    return [r for r in rows if r[0] == d]
+
+
+def fetch_day(browser, day):
+    """Один день. Пробує назву групи як є, потім малими літерами (на випадок чутливості до регістру)."""
+    d = day.strftime("%d.%m.%Y")
+    for g in dict.fromkeys([GROUP, GROUP.lower()]):
+        rows = _query(browser, d, g)
+        if rows:
+            print(f"{d}: знайдено з назвою групи {g!r}")
+            return rows
+    return []
 
 
 def load_old():
